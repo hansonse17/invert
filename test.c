@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+#include <fcntl.h>
+
+#define BUCKET_LOCATION "./buckets"
 
 void printdir(char* path) {
   DIR *dp = opendir(path); 
@@ -34,30 +37,54 @@ void printdir(char* path) {
   }
 }
 
-void all_cap (char * string) {
-  char tmp[3] = "st";//(char )string;
+char* all_cap (char * string) {
+  char tmp[2];// = "st";//(char )string;
+  memcpy(tmp, string, sizeof(char)*3);
   char* ret = malloc(strlen(string) + 1);
-  int i = 0;
+  int i = 0; 
   while(tmp[i]) {
-      putchar( toupper(tmp[i]));
-    //  strcat(ret, (char)toupper(tmp[i]));
-      i++;
+    tmp[i]=(char) toupper(tmp[i]);
+    i++;
   }
-  printf("%s\n", ret);
-
-  return;
+  memcpy(ret, tmp, sizeof(char)*3);
+  return ret;
 } 
 
-void sendToBucket (char* word, char* path) {
-  char * bucket_dir = malloc(strlen("./buckets") + strlen(path) + 1);
-  strcpy(bucket_dir, "./buckets");
+char* hash(char* word) {
+  char* ret = malloc(sizeof(char) * 3);
+  memcpy(ret, word, 2);
+  strcat(ret, "\0");
+  return all_cap(ret);
+}
+
+char* findBucket(char* word) {
+  char * ret = malloc(strlen(BUCKET_LOCATION) + 4);
+  strcpy(ret, BUCKET_LOCATION);
+  strcat(ret, "/");
+  strcat(ret, hash(word));
+  return ret;
+}
+
+void sendToBucket (char* word, char* word_location) {
+
+  char* bucket_dir = findBucket(word);
+
+  printf("%s\n", bucket_dir);
   
-  char * hash = malloc(sizeof(char) * 3);
-  memcpy(hash, word, 2);
-  strcat(hash, "\0");
-  printf("Hash : %s\n", hash);
-  
-  all_cap(hash);
+  //LOCK!!!
+  char* line_to_file = malloc(strlen(word) + strlen(word_location) + 3);
+  strcpy(line_to_file, word);
+  strcat(line_to_file, " ");
+  strcat(line_to_file, word_location);
+  strcat(line_to_file, "\n\0");
+  int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
+  if (fd > -1) {
+    write(fd, line_to_file, strlen(line_to_file));
+  } else {
+    printf("Error opening file\n");
+  }
+  close(fd);
+  //UNLOCK!!
   
   return;
 
@@ -70,7 +97,7 @@ int main (void) {
   
  // printdir(path);
 
-  sendToBucket("hello", "./world.txt");
+  sendToBucket("it is cold", "./world.txt");
 
 
   
