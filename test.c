@@ -7,6 +7,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <regex.h>
 
 #define BUCKET_LOCATION "./buckets"
 
@@ -51,6 +52,16 @@ char* all_cap (char * string) {
 } 
 
 char* hash(char* word) {
+//TO DO: FIGURE OUT REGULAR EXPRESSIONS (linux.die.net/man/3/regcomp)
+//TO DO: don't save multiple entries for same word same file 
+  //take out non word characters from 'word'
+  regex_t regex;
+  if(regcomp(&regex, "\W", 0)) {
+    printf("Error, could not compile regex\n");
+    exit(1);
+  }
+  
+  
   char* ret = malloc(sizeof(char) * 3);
   memcpy(ret, word, 2);
   strcat(ret, "\0");
@@ -66,17 +77,17 @@ char* findBucket(char* word) {
 }
 
 void sendToBucket (char* word, char* word_location) {
-
+  printf("Your word is: %s\n", word);
   char* bucket_dir = findBucket(word);
 
-  printf("%s\n", bucket_dir);
+//  printf("%s\n", bucket_dir);
   
-  //LOCK!!!
   char* line_to_file = malloc(strlen(word) + strlen(word_location) + 3);
   strcpy(line_to_file, word);
   strcat(line_to_file, " ");
   strcat(line_to_file, word_location);
   strcat(line_to_file, "\n\0");
+  //LOCK!!!
   int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
   if (fd > -1) {
     write(fd, line_to_file, strlen(line_to_file));
@@ -91,15 +102,36 @@ void sendToBucket (char* word, char* word_location) {
 }
 
 
+void index_file (char* file_location) {
+  char output[256];
+//  char output2[256];
+  FILE *fptr;
+
+  if((fptr = fopen(file_location, "r")) == NULL) {
+    printf("Error opening file!\n");
+    exit(1);
+  }
+  
+  while(fscanf(fptr, "%s", output) != EOF) {
+//    printf("output : %s\n", output);
+    sendToBucket(output, file_location);
+  }
+  fclose(fptr);
+
+  return;
+
+}
+
+
 int main (void) {
 
   char* path = ("./sample");
   
  // printdir(path);
 
-  sendToBucket("it is cold", "./world.txt");
+  //sendToBucket("it is cold", "./world.txt");
 
-
+  index_file("./sample/forest.txt");
   
   
   return 0;
