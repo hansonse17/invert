@@ -10,33 +10,9 @@
 #include <regex.h>
 
 #define BUCKET_LOCATION "./buckets"
+#define DELIMITERS " .,|[]():;<>+!?_=/\\\'\"\n\t"
 
-void printdir(char* path) {
-  DIR *dp = opendir(path); 
-  struct dirent *ep;
 
-  if (dp != NULL) {
-    while (ep = readdir(dp)) {
-      struct stat buf;
-      char * name = ep->d_name;
-      char * path_name = malloc(strlen(path)+strlen(name)+1);
-      strcpy(path_name, path);
-      strcat(path_name, "/");
-      strcat(path_name, name);
-      stat((const char*)path_name, &buf);
-      printf("%s %d\n", path_name, S_ISDIR(buf.st_mode));
-      if((S_ISDIR(buf.st_mode) == 1) && 
-         (strcmp(name, ".")) && 
-         (strcmp(name, ".."))) { //if current directory entry is another direcory
-        printdir(path_name);
-      }
-    }
-  (void) closedir (dp);
-  }
-  else { 
-    perror ("didn't work\n");
-  }
-}
 
 char* all_cap (char * string) {
   char tmp[2];// = "st";//(char )string;
@@ -52,8 +28,6 @@ char* all_cap (char * string) {
 } 
 
 char* hash(char* word) {
-//TO DO: FIGURE OUT REGULAR EXPRESSIONS (linux.die.net/man/3/regcomp)
-//TO DO: don't save multiple entries for same word same file 
   //take out non word characters from 'word'
   regex_t regex;
   regmatch_t match[2];
@@ -68,7 +42,7 @@ char* hash(char* word) {
     strcat(ret, "\0");
     return all_cap(ret);}
   else {
-    return "xx"; //x files
+    return "xx"; //x files: unexplainable phenomena 
   }
 }
 
@@ -78,6 +52,25 @@ char* findBucket(char* word) {
   strcat(ret, "/");
   strcat(ret, hash(word));
   return ret;
+}
+
+int alreadyIndexed(char* line_to_file, char* bucket_dir) {
+  FILE *fptr;
+  char buffer[256];
+  //LOCK!
+  if((fptr = fopen(bucket_dir, "r")) == NULL) {
+    //UNLOCK
+    return 0;
+  } else {
+    while(fgets(buffer, 256, fptr)) {
+      if(strcasecmp(line_to_file, buffer) == 0) {
+        //UNLOCK
+        return 1;
+      }
+    }
+    //UNLOCK
+    return 0;
+  }
 }
 
 void sendToBucket (char* word, char* word_location) {
@@ -91,56 +84,79 @@ void sendToBucket (char* word, char* word_location) {
   strcat(line_to_file, " ");
   strcat(line_to_file, word_location);
   strcat(line_to_file, "\n\0");
-  //LOCK!!!
-  int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
-  if (fd > -1) {
-    write(fd, line_to_file, strlen(line_to_file));
-  } else {
-    printf("Error opening file\n");
+  if(!alreadyIndexed(line_to_file, bucket_dir)) {
+    //LOCK!!!
+    int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
+    if (fd > -1) {
+      write(fd, line_to_file, strlen(line_to_file));
+    } else {
+      printf("Error opening file\n");
+    }
+    close(fd);
+    //UNLOCK!!
   }
-  close(fd);
-  //UNLOCK!!
-  
   return;
 
 }
 
 
-void index_file (char* file_location) {
+void indexFile (char* file_location) {
   char buffer[256];
   char*  output;
   FILE *fptr;
-
+  printf("Now indexing : %s\n", file_location);
   if((fptr = fopen(file_location, "r")) == NULL) {
     printf("Error opening file!\n");
     exit(1);
   }
 
-  char* delimit = " .,|[]():;<>+!?_=/\\\'\"\n\t"; 
   while(fgets(buffer, 256, fptr)) {
-    output = strtok(buffer, delimit);
+    output = strtok(buffer, DELIMITERS);
     while(output) {
       sendToBucket(output, file_location);
-      output = strtok (NULL, delimit);
+      output = strtok (NULL, DELIMITERS);
     }
   }
   fclose(fptr);
-
   return;
-
 }
 
+void indexDir(char* path) {
+  DIR *dp = opendir(path); 
+  struct dirent *ep;
 
+  if (dp != NULL) {
+    while (ep = readdir(dp)) {
+      struct stat buf;
+      char * name = ep->d_name;
+      char * path_name = malloc(strlen(path)+strlen(name)+1);
+      strcpy(path_name, path);
+      strcat(path_name, "/");
+      strcat(path_name, name);
+      stat((const char*)path_name, &buf);
+      //printf("%s %d\n", path_name, S_ISDIR(buf.st_mode));
+      if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) { //if current directory entry is current or parent
+        //do nothing
+      } else if((S_ISDIR(buf.st_mode) == 1) && 
+         (strcmp(name, ".")) && 
+         (strcmp(name, ".."))) { //if current directory entry is another direcory 
+        indexDir(path_name);
+      } else { // if current directory entry is a file
+        indexFile(path_name);
+      }
+    }
+  (void) closedir (dp);
+  }
+  else { 
+    perror ("Error opening directory\n");
+  }
+}
 int main (void) {
 
   char* path = ("./sample");
   
- // printdir(path);
 
-  //sendToBucket("it is cold", "./world.txt");
-
-  index_file("./sample/forest.txt");
-  
+  indexDir(path);
   
   return 0;
 }
