@@ -10,7 +10,7 @@
 #include <regex.h>
 
 #define BUCKET_LOCATION "./buckets"
-#define DELIMITERS " .,|[]():;<>+!?_=/\\\'\"\n\t"
+#define DELIMITERS " @~`#&.,|[](^):;<>+!?_=/%$-\\\'\"\n\t"
 
 
 
@@ -27,8 +27,29 @@ char* all_cap (char * string) {
   return ret;
 } 
 
+/*
 char* hash(char* word) {
   //take out non word characters from 'word'
+
+  char tmp[256];
+  strcpy(tmp, word);
+  if(iscntrl(tmp[0]) || iscntrl(tmp[1])) {
+    return "xx";
+  }
+  if(isalpha(tmp[0]) || isdigit(tmp[0])) {
+    if(isalpha(tmp[1]) || isdigit(tmp[1])) {
+      char* ret = malloc(sizeof(char) * 2);
+      memcpy(ret, word, 2);
+      strcat(ret, "\0");
+      return all_cap(ret);
+    }}
+  return "xx"; 
+} */
+
+char* hash(char* word) {
+  //take out non word characters from 'word'
+
+
   regex_t regex;
   regmatch_t match[2];
   if(regcomp(&regex, "[^A-Za-z0-9_-]", 0)) {
@@ -44,7 +65,7 @@ char* hash(char* word) {
   else {
     return "xx"; //x files: unexplainable phenomena 
   }
-}
+} 
 
 char* findBucket(char* word) {
   char * ret = malloc(strlen(BUCKET_LOCATION) + 4);
@@ -60,23 +81,22 @@ int alreadyIndexed(char* line_to_file, char* bucket_dir) {
   //LOCK!
   if((fptr = fopen(bucket_dir, "r")) == NULL) {
     //UNLOCK
-    return 0;
+    return 0; //false
   } else {
     while(fgets(buffer, 256, fptr)) {
       if(strcasecmp(line_to_file, buffer) == 0) {
         //UNLOCK
-        return 1;
+        return 1; //true
       }
     }
     //UNLOCK
-    return 0;
+    return 0; //false
   }
 }
 
 void sendToBucket (char* word, char* word_location) {
  // printf("Your word is: %s\n", word);
   char* bucket_dir = findBucket(word);
-
 //  printf("%s\n", bucket_dir);
   
   char* line_to_file = malloc(strlen(word) + strlen(word_location) + 3);
@@ -84,13 +104,15 @@ void sendToBucket (char* word, char* word_location) {
   strcat(line_to_file, " ");
   strcat(line_to_file, word_location);
   strcat(line_to_file, "\n\0");
+
+
   if(!alreadyIndexed(line_to_file, bucket_dir)) {
     //LOCK!!!
     int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
     if (fd > -1) {
       write(fd, line_to_file, strlen(line_to_file));
     } else {
-      printf("Error opening file\n");
+      printf("Error opening bucket file : %s\n", bucket_dir);
     }
     close(fd);
     //UNLOCK!!
@@ -137,9 +159,7 @@ void indexDir(char* path) {
       //printf("%s %d\n", path_name, S_ISDIR(buf.st_mode));
       if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) { //if current directory entry is current or parent
         //do nothing
-      } else if((S_ISDIR(buf.st_mode) == 1) && 
-         (strcmp(name, ".")) && 
-         (strcmp(name, ".."))) { //if current directory entry is another direcory 
+      } else if(S_ISDIR(buf.st_mode) == 1) { //if current directory entry is another direcory 
         indexDir(path_name);
       } else { // if current directory entry is a file
         indexFile(path_name);
@@ -151,9 +171,13 @@ void indexDir(char* path) {
     perror ("Error opening directory\n");
   }
 }
-int main (void) {
-
-  char* path = ("./sample");
+int main (int argc, char** argv) {
+  if(argc < 2) {
+    printf("Please provide a directory location.\n");
+    return 0;
+  }
+  
+  char* path = argv[1]; //("./sample");
   
 
   indexDir(path);
