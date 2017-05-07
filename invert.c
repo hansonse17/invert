@@ -8,72 +8,15 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <regex.h>
+#include <./hash.c>
 
-#define BUCKET_LOCATION "./buckets"
+
 #define DELIMITERS " @~`#&.,|[](^):;<>+!?_=/%$-\\\'\"\n\t"
 
 
-
-char* all_cap (char * string) {
-  char tmp[2];// = "st";//(char )string;
-  memcpy(tmp, string, sizeof(char)*3);
-  char* ret = malloc(strlen(string) + 1);
-  int i = 0; 
-  while(tmp[i]) {
-    tmp[i]=(char) toupper(tmp[i]);
-    i++;
-  }
-  memcpy(ret, tmp, sizeof(char)*3);
-  return ret;
-} 
-
-/*
-char* hash(char* word) {
-  //take out non word characters from 'word'
-
-  char tmp[256];
-  strcpy(tmp, word);
-  if(iscntrl(tmp[0]) || iscntrl(tmp[1])) {
-    return "xx";
-  }
-  if(isalpha(tmp[0]) || isdigit(tmp[0])) {
-    if(isalpha(tmp[1]) || isdigit(tmp[1])) {
-      char* ret = malloc(sizeof(char) * 2);
-      memcpy(ret, word, 2);
-      strcat(ret, "\0");
-      return all_cap(ret);
-    }}
-  return "xx"; 
-} */
-
-char* hash(char* word) {
-  //take out non word characters from 'word'
+//char* hash(char* word);
 
 
-  regex_t regex;
-  regmatch_t match[2];
-  if(regcomp(&regex, "[^A-Za-z0-9_-]", 0)) {
-    printf("Error, could not compile regex\n");
-    exit(1);
-  }
-  
-  if(regexec(&regex, word, 1, match, 0)){
-    char* ret = malloc(sizeof(char) * 3);
-    memcpy(ret, word, 2);
-    strcat(ret, "\0");
-    return all_cap(ret);}
-  else {
-    return "xx"; //x files: unexplainable phenomena 
-  }
-} 
-
-char* findBucket(char* word) {
-  char * ret = malloc(strlen(BUCKET_LOCATION) + 4);
-  strcpy(ret, BUCKET_LOCATION);
-  strcat(ret, "/");
-  strcat(ret, hash(word));
-  return ret;
-}
 
 int alreadyIndexed(char* line_to_file, char* bucket_dir) {
   FILE *fptr;
@@ -106,7 +49,7 @@ void sendToBucket (char* word, char* word_location) {
   strcat(line_to_file, "\n\0");
 
 
-  if(!alreadyIndexed(line_to_file, bucket_dir)) {
+  if(!alreadyIndexed(line_to_file, bucket_dir){
     //LOCK!!!
     int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
     if (fd > -1) {
@@ -171,6 +114,8 @@ void indexDir(char* path) {
     perror ("Error opening directory\n");
   }
 }
+
+
 int main (int argc, char** argv) {
   if(argc < 2) {
     printf("Please provide a directory location.\n");
@@ -184,3 +129,4 @@ int main (int argc, char** argv) {
   
   return 0;
 }
+
