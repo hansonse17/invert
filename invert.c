@@ -9,12 +9,34 @@
 #include <fcntl.h>
 #include <regex.h>
 #include <./hash.c>
+#include <pthread.h>
 
 
 #define DELIMITERS " @~`#&.,|[](^):;<>+!?_=/%$-\\\'\"\n\t"
 
+typedef struct thread_args {
+  char* path;
+} thread_args_t;
 
 //char* hash(char* word);
+
+typedef struct thread_node {
+  pthread_t * thread;
+  struct thread_node * next_thread;
+} thread_node_t;
+
+typedef struct thread_list {
+  thread_node_t * head;
+} thread_list_t;
+
+typedef struct lock_node {
+  pthread_mutex_t* lock;
+  struct lock_node_t* next;
+} lock_node_t;
+
+typedef struct lock_list {
+  lock_node_t* head;
+} lock_list_t;
 
 
 
@@ -49,7 +71,7 @@ void sendToBucket (char* word, char* word_location) {
   strcat(line_to_file, "\n\0");
 
 
-  if(!alreadyIndexed(line_to_file, bucket_dir){
+  if(!alreadyIndexed(line_to_file, bucket_dir)){
     //LOCK!!!
     int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
     if (fd > -1) {
@@ -65,7 +87,9 @@ void sendToBucket (char* word, char* word_location) {
 }
 
 
-void indexFile (char* file_location) {
+void* indexFile (void* args) {
+  thread_args_t* arguments = (thread_args_t*) args;
+  char* file_location = arguments->path;
   char buffer[256];
   char*  output;
   FILE *fptr;
@@ -83,15 +107,15 @@ void indexFile (char* file_location) {
     }
   }
   fclose(fptr);
-  return;
+  return NULL;
 }
 
-void indexDir(char* path) {
+void indexDir(char* path, thread_list_t* threadList) {
   DIR *dp = opendir(path); 
   struct dirent *ep;
 
   if (dp != NULL) {
-    while (ep = readdir(dp)) {
+    while ((ep = readdir(dp))) {
       struct stat buf;
       char * name = ep->d_name;
       char * path_name = malloc(strlen(path)+strlen(name)+1);
@@ -103,12 +127,24 @@ void indexDir(char* path) {
       if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) { //if current directory entry is current or parent
         //do nothing
       } else if(S_ISDIR(buf.st_mode) == 1) { //if current directory entry is another direcory 
-        indexDir(path_name);
+        indexDir(path_name, threadList);
       } else { // if current directory entry is a file
-        indexFile(path_name);
+
+        thread_node_t* new_node = malloc(sizeof(thread_node_t));
+        thread_args_t* new_args = malloc(sizeof(thread_args_t));
+        char* new_path = malloc(sizeof(char)*strlen(path));
+        strcpy(new_path, path);
+        new_args->path = new_path;
+        new_node->next_thread = threadList->head;
+        threadList->head = new_node;
+        if(pthread_create(threadList->head->thread, NULL, indexFile, (void*) new_args)){
+          perror("pthread_create");
+          exit(2);
+        }
+        //  indexFile(path_name);
       }
     }
-  (void) closedir (dp);
+    (void) closedir (dp);
   }
   else { 
     perror ("Error opening directory\n");
@@ -121,11 +157,24 @@ int main (int argc, char** argv) {
     printf("Please provide a directory location.\n");
     return 0;
   }
+
   
   char* path = argv[1]; //("./sample");
-  
 
-  indexDir(path);
+  thread_list_t* threadList = malloc(sizeof(thread_list_t));
+  threadList->head = NULL;
+  lock_list_t* lockList = malloc(sizeof(lock_list_t)):
+  lockList->head = NULL;
+
+  indexDir(path, threadList);
+  thread_node_t* pnt = threadList->head;
+  while(pnt != NULL) {
+    if(pthread_join(*(pnt->thread), NULL)){
+      perror("error joining threads");
+      exit(2);
+    }
+    pnt = pnt->next_thread;
+  }
   
   return 0;
 }
