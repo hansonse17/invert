@@ -18,17 +18,6 @@ typedef struct thread_args {
   char* path;
 } thread_args_t;
 
-//char* hash(char* word);
-
-typedef struct thread_node {
-  pthread_t * thread;
-  struct thread_node * next_thread;
-} thread_node_t;
-
-typedef struct thread_list {
-  thread_node_t * head;
-} thread_list_t;
-
 typedef struct lock_node {
   pthread_mutex_t* lock;
   struct lock_node_t* next;
@@ -38,6 +27,15 @@ typedef struct lock_list {
   lock_node_t* head;
 } lock_list_t;
 
+typedef struct file_node {
+  char * path;
+  struct file_node* next;
+} file_node_t;
+
+typedef struct file_list {
+  file_node_t * head;
+  int count;
+} file_list_t;
 
 
 int alreadyIndexed(char* line_to_file, char* bucket_dir) {
@@ -86,6 +84,12 @@ void sendToBucket (char* word, char* word_location) {
 
 }
 
+void* kernel_test(void* args) {
+  thread_args_t* arguments = (thread_args_t*) args; 
+  //printf("You in a thread!\n");
+  printf("Given path : %s\n", arguments->path);
+  return NULL;
+}
 
 void* indexFile (void* args) {
   thread_args_t* arguments = (thread_args_t*) args;
@@ -110,9 +114,10 @@ void* indexFile (void* args) {
   return NULL;
 }
 
-void indexDir(char* path, thread_list_t* threadList) {
+void indexDir(char* path, file_list_t* files) {
   DIR *dp = opendir(path); 
   struct dirent *ep;
+
 
   if (dp != NULL) {
     while ((ep = readdir(dp))) {
@@ -127,22 +132,16 @@ void indexDir(char* path, thread_list_t* threadList) {
       if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) { //if current directory entry is current or parent
         //do nothing
       } else if(S_ISDIR(buf.st_mode) == 1) { //if current directory entry is another direcory 
-        indexDir(path_name, threadList);
+        indexDir(path_name, files);
       } else { // if current directory entry is a file
-
-        thread_node_t* new_node = malloc(sizeof(thread_node_t));
-        thread_args_t* new_args = malloc(sizeof(thread_args_t));
-        char* new_path = malloc(sizeof(char)*strlen(path));
-        strcpy(new_path, path);
-        new_args->path = new_path;
-        new_node->next_thread = threadList->head;
-        threadList->head = new_node;
-        if(pthread_create(threadList->head->thread, NULL, indexFile, (void*) new_args)){
-          perror("pthread_create");
-          exit(2);
-        }
-        //  indexFile(path_name);
-      }
+        file_node_t* new_node = malloc(sizeof(file_node_t));
+        char* new_path = malloc(sizeof(char)*strlen(path_name)+1);
+        strcpy(new_path, path_name);
+        new_node->path = new_path;
+        new_node->next = files->head;
+        files->head = new_node;
+        files->count = files->count + 1;
+     }
     }
     (void) closedir (dp);
   }
@@ -152,29 +151,72 @@ void indexDir(char* path, thread_list_t* threadList) {
 }
 
 
+
 int main (int argc, char** argv) {
   if(argc < 2) {
     printf("Please provide a directory location.\n");
     return 0;
   }
-
+ 
+  file_list_t* files = malloc(sizeof(file_list_t));
+  files->head = NULL;
+  files->count = 0; 
   
   char* path = argv[1]; //("./sample");
+/*
+    lock_list_t* lockList = malloc(sizeof(lock_list_t)):
+  lockList->head = NULL; */
 
-  thread_list_t* threadList = malloc(sizeof(thread_list_t));
-  threadList->head = NULL;
-  lock_list_t* lockList = malloc(sizeof(lock_list_t)):
-  lockList->head = NULL;
+  indexDir(path, files);
+  printf("File count : %d\n", files->count);
+  int num_files = files->count;
+  pthread_t threads[num_files];
+  file_node_t* pnt = files->head;
+  int i = 0;
+  while(pnt != NULL) {
+    thread_args_t* args = malloc(sizeof(thread_args_t));
+    char* this_path = malloc(sizeof(char)*strlen(pnt->path)+1);
+    strcpy(this_path, pnt->path);
+    args->path = this_path;
+    if(pthread_create(&threads[i], NULL, indexFile, args)) {
+      perror("pthread_create");
+      exit(2);
+    }
+    pnt = pnt->next;
+    i++;
+  }
+  i = 0;
+  pnt = files->head;
+  while(pnt != NULL) {
+    if(pthread_join(threads[i], NULL)) {
+      perror("pthread_join");
+      exit(2);
+    }
+    pnt = pnt->next;
+    i++;
+  }
 
-  indexDir(path, threadList);
-  thread_node_t* pnt = threadList->head;
+  
+
+/*   
+ * PRINT NAMES OF FILES
+ *
+  file_node_t* pnt = files->head;
+  while(pnt != NULL) {
+    printf("File : %s\n", pnt->path);
+    pnt = pnt->next;
+  } 
+*
+*/
+
+/*  thread_node_t* pnt = threadList->head;
   while(pnt != NULL) {
     if(pthread_join(*(pnt->thread), NULL)){
       perror("error joining threads");
       exit(2);
     }
     pnt = pnt->next_thread;
-  }
+  } */
   
   return 0;
 }

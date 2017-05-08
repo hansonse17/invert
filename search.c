@@ -18,7 +18,7 @@ void search(char* term) {
   char buffer[256];
   //Lock
   if((fptr = fopen(bucket_location, "r")) == NULL) {
-    printf("Error opening file!\n");
+    printf("Term not found!\n");
     exit(1);
   }
   int found = 0; //0 is not found
