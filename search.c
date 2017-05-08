@@ -13,7 +13,7 @@
 
 
 void search(char* term) {
-  char* bucket_location = findBucket(term);
+  char* bucket_location = findBucket(hash(term));
   FILE *fptr;
   char buffer[256];
   //Lock

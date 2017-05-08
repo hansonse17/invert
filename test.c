@@ -8,43 +8,54 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <regex.h>
-
+#include <ctype.h>
 #define BUCKET_LOCATION "./buckets"
+#define BUCKET_REGIONS 7
 
-char* all_cap (char * string) {
-  char tmp[2];// = "st";//(char )string;
-  memcpy(tmp, string, sizeof(char)*3);
-  char* ret = malloc(strlen(string) + 1);
-  int i = 0; 
-  while(tmp[i]) {
-    tmp[i]=(char) toupper(tmp[i]);
-    i++;
+int findBucketRegion (char* bucket) {
+  char indexable[3];
+  strcpy(indexable, bucket);
+  //non-letter case = region 0
+  //xx case = region BUCKET_REGIONS-1
+  int first_char = indexable[0];
+  if(isdigit(first_char)) { //48 <= first_char && first_char <= 57) {
+    return 0;
+  } 
+  else if(isalpha(first_char)) { //65 <= indexable[0] && indexable[0] <= 70) {
+    return (first_char % (BUCKET_REGIONS-2))+1;
   }
-  memcpy(ret, tmp, sizeof(char)*3);
-  return ret;
-} 
+  else {
+    return BUCKET_REGIONS-1;
+  } /*
+  else if(71 <= indexable[0] && indexable[0] <= 75) {
+    return 2;
+  }
+  else if(76 <= indexable[0] && indexable[0] <= 80) {
+    return 3;
+  }
+  else if(81 <= indexable[0] && indexable[0] <= 85) {
+    return 4;
+  }
+  else if(86 <= indexable[0] && indexable[0] <= 90) {
+    return 5;
+  } else {
+    return 6;
+    }*/
+  
+ 
+    //printf("Here : %d\n", (indexable[0] % (BUCKET_REGIONS-2)) + 1);
 
+  //how did you get here??
+  return -1;
 
-char* hash(char* word) {
-  //take out non word characters from 'word'
-
-  char tmp[256];
-  strcpy(tmp, word);
-  if(isalpha(tmp[0]) || isdigit(tmp[0])) {
-    if(isalpha(tmp[1]) || isdigit(tmp[1])) {
-      char* ret = malloc(sizeof(char) * 3);
-      memcpy(ret, word, 2);
-      strcat(ret, "\0");
-      return all_cap(ret);
-    }}
-  return "xx"; 
 }
 
 
-void main() {
-  printf("Hashed : %s\n", hash("aWllo"));
-  printf("%d\n", isdigit('a'));
-  printf("%d\n", isdigit('9'));
-  printf("%d\n", (int) ('9'));
-  printf("%d\n", isdigit('%'));
+void main(){
+  printf("%d\n", findBucketRegion("666"));
+  printf("%d\n", findBucketRegion("AB"));
+  printf("%d\n", findBucketRegion("Cc"));
+  printf("%d\n", findBucketRegion("DD"));
+  printf("%d\n", findBucketRegion("ZY"));
+  printf("%d\n", findBucketRegion("&Y"));
 }
