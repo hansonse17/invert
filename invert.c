@@ -13,8 +13,8 @@
 
 
 #define DELIMITERS " @~`#&.,|[](^):;<>+!?_=/%$-\\\'\"\n\t\r\f\v"
-#define MAX_THREADS 50 //not yet implemented
-
+#define MAX_THREADS 25
+#define BUCKET_REGIONS 25
 /*
 
 Inverted indexer: 
@@ -44,24 +44,16 @@ typedef struct file_list {
 int alreadyIndexed(char* line_to_file, char* bucket_dir, int bucket_region) {
   FILE *fptr;
   char buffer[256];
-  //LOCK!
-  //  pthread_mutex_lock(&lock_array[bucket_region]);
   if((fptr = fopen(bucket_dir, "r")) == NULL) {
-    //UNLOCK
-    //  pthread_mutex_unlock(&lock_array[bucket_region]);
     return 0; //false
   } else {
     while(fgets(buffer, 256, fptr)) {
       if(strcasecmp(line_to_file, buffer) == 0) {
-        //UNLOCK
-        //  pthread_mutex_unlock(&lock_array[bucket_region]);
         fclose(fptr);
         return 1; //true
       }
     }
-    //UNLOCK
     fclose(fptr);
-    //    pthread_mutex_unlock(&lock_array[bucket_region]); 
     return 0; //false
   }
 }
@@ -116,6 +108,7 @@ void* indexFile (void* args) {
   thread_args_t* arguments = (thread_args_t*) args;
   char* file_location = arguments->path;
   char buffer[256];
+  char* saveptr = buffer;
   char*  output;
   FILE *fptr;
   printf("Now indexing : %s\n", file_location);
@@ -125,12 +118,10 @@ void* indexFile (void* args) {
   }
 
   while(fgets(buffer, 256, fptr)) {
-    output = strtok(buffer, DELIMITERS);
-    while(output) {
-   
+    output = strtok_r(buffer, DELIMITERS, &saveptr);
+    while(output) {   
       sendToBucket(output, file_location);
-
-      output = strtok (NULL, DELIMITERS);    
+      output = strtok_r (NULL, DELIMITERS, &saveptr);    
     }
   }
   
@@ -175,7 +166,10 @@ void indexDir(char* path, file_list_t* files) {
   }
 }
 
-
+int min(int a, int b) {
+  if(a <= b) return a;
+  return b;
+}
 
 int main (int argc, char** argv) {
   if(argc < 2) {
@@ -201,13 +195,14 @@ int main (int argc, char** argv) {
   indexDir(path, files);
   printf("File count : %d\n", files->count);
   int num_files = files->count;
-  //  int remaining_files = num_files;
-  //  while(remaining_files > 0) {
-    //some kind of limiter
-    pthread_t threads[num_files];
-    file_node_t* pnt = files->head;
+  int remaining_files = num_files;
+  file_node_t* pnt = files->head;
+  while(remaining_files > 0) {
+    int thread_count = min(remaining_files, MAX_THREADS);
+    printf("thread count : %d\n", thread_count); 
+    pthread_t threads[thread_count];
     int i = 0;
-    while(pnt != NULL) {
+    while((pnt != NULL) && (i < thread_count)) {
       thread_args_t* args = malloc(sizeof(thread_args_t));
       char* this_path = malloc(sizeof(char)*strlen(pnt->path)+1);
       strcpy(this_path, pnt->path);
@@ -222,15 +217,15 @@ int main (int argc, char** argv) {
     } 
     i = 0;
     pnt = files->head;
-    while(pnt != NULL) {
+    while((pnt != NULL) && (i < thread_count)) {
       if(pthread_join(threads[i++], NULL)) {
         perror("pthread_join");
         exit(2);
       }
-      pnt = pnt->next;
-      } 
-    // num_files
-    // }
+      pnt = pnt->next;//pnt shoudld end up where the thread creation left off
+    } 
+    remaining_files -= thread_count;
+  }
 
   for(int i=0; i<BUCKET_REGIONS; i++) {
     pthread_mutex_destroy(&lock_array[i]);

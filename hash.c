@@ -1,5 +1,4 @@
 #define BUCKET_LOCATION "./buckets"
-#define BUCKET_REGIONS 10
 
 char* all_cap (char * string) {
   char tmp[3];// = "st";//(char )string;
