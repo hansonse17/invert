@@ -8,28 +8,26 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <regex.h>
-#include <./hash.c>
+#include "./hash.c"
 #include <pthread.h>
 
-
+//delimiters used for tokenizing strings
 #define DELIMITERS " @~`#&.,|[](^):;<>+!?_=/%$-\\\'\"\n\t\r\f\v"
+
+//MAX_THREADS and BUCKET_REGIONS can be varied 
 #define MAX_THREADS 25
 #define BUCKET_REGIONS 25
-/*
 
-Inverted indexer: 
-  >Search.c works fine
-  >Invert.c works when running in serial
-  >When in parallel, Invert.c runs but is not acurate.
- */
-
+//array that store locks
 pthread_mutex_t lock_array[BUCKET_REGIONS];
-pthread_mutex_t bug_lock;
 
+//struct for arguments to use in pthread_create()
 typedef struct thread_args {
   char* path;
 } thread_args_t;
 
+/* structs for file_node and list structures just like
+   typical node and list struct */
 typedef struct file_node {
   char * path;
   struct file_node* next;
@@ -41,6 +39,9 @@ typedef struct file_list {
 } file_list_t;
 
 
+/* alreadyIndexed function is for checking whether line_to_file exists in the
+   files in the bucket_dir
+*/
 int alreadyIndexed(char* line_to_file, char* bucket_dir, int bucket_region) {
   FILE *fptr;
   char buffer[256];
@@ -58,32 +59,32 @@ int alreadyIndexed(char* line_to_file, char* bucket_dir, int bucket_region) {
   }
 }
 
+/* sendToBucket checks whether the word is already indexed, 
+   and then opens the bucket file and writes the word
+   together with its location to the bucket file
+*/
 void sendToBucket (char* word, char* word_location) {
       
   // printf("Your word is: %s : %s\n", word, word_location);
   char* bucket_name = hash(word);
   int bucket_region = findBucketRegion(bucket_name);
-  
+
+  //ignore if either or both of the first two characters are not alphanumerical
   if((!isalnum(bucket_name[0])) || (!isalnum(bucket_name[1]))) {
       
     return;
   }
   char* bucket_dir = findBucket(bucket_name);
-//  printf("%s\n", bucket_dir);
-
-
   char* line_to_file = malloc(strlen(word) + strlen(word_location) + 3);
   strcpy(line_to_file, word);
   strcat(line_to_file, " ");
   strcat(line_to_file, word_location);
   strcat(line_to_file, "\n\0");
-
-  // pthread_mutex_lock(&bug_lock); //LOCK!!
-   pthread_mutex_lock(&lock_array[bucket_region]); //LOCK!!!
+  
+  pthread_mutex_lock(&lock_array[bucket_region]); //LOCK!!!
   if(!alreadyIndexed(line_to_file, bucket_dir, bucket_region)){
     int fd = open(bucket_dir, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
     if (fd > -1) {
-      // printf("%s in %s\n", line_to_file, bucket_dir);
       write(fd, line_to_file, strlen(line_to_file));
     } else {
       printf("Error opening bucket file : %s\n", bucket_dir);
@@ -96,13 +97,11 @@ void sendToBucket (char* word, char* word_location) {
 
 }
 
-void* kernel_test(void* args) {
-  thread_args_t* arguments = (thread_args_t*) args; 
-  //printf("You in a thread!\n");
-  printf("Given path : %s\n", arguments->path);
-  return NULL;
-}
 
+/* indexFile function is the parallelized function that accesses 
+   files and use the sendToBucket function to send the words 
+   read from files in a given directory to the buckets
+*/
 void* indexFile (void* args) {
 
   thread_args_t* arguments = (thread_args_t*) args;
@@ -130,6 +129,11 @@ void* indexFile (void* args) {
   return NULL;
 }
 
+
+/* indexDir function recursively goes through the files in a given directory
+   and its subdirectories and apply indexFile on the files in that given 
+   directory 
+*/
 void indexDir(char* path, file_list_t* files) {
   DIR *dp = opendir(path); 
   struct dirent *ep;
@@ -145,9 +149,11 @@ void indexDir(char* path, file_list_t* files) {
       strcat(path_name, name);
       stat((const char*)path_name, &buf);
       //printf("%s %d\n", path_name, S_ISDIR(buf.st_mode));
-      if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) { //if current directory entry is current or parent
+      if ((strcmp(name, ".") == 0) || (strcmp(name, "..") == 0)) {
+	//if current directory entry is current or parent
         //do nothing
-      } else if(S_ISDIR(buf.st_mode) == 1) { //if current directory entry is another direcory 
+      } else if(S_ISDIR(buf.st_mode) == 1) {
+	//if current directory entry is another direcory 
         indexDir(path_name, files);
       } else { // if current directory entry is a file
         file_node_t* new_node = malloc(sizeof(file_node_t));
@@ -166,6 +172,9 @@ void indexDir(char* path, file_list_t* files) {
   }
 }
 
+/* min function returns the lesser of the  
+   two parameters a and b
+*/
 int min(int a, int b) {
   if(a <= b) return a;
   return b;
@@ -176,21 +185,16 @@ int main (int argc, char** argv) {
     printf("Please provide a directory location.\n");
     return 0;
   }
- 
+  //initializing file list
   file_list_t* files = malloc(sizeof(file_list_t));
   files->head = NULL;
-  files->count = 0; 
+  files->count = 0;
+  //initializing locks
   for(int i=0; i<BUCKET_REGIONS; i++) {
     pthread_mutex_init(&lock_array[i], NULL);
   }
-  pthread_mutex_init(&bug_lock, NULL);
   
-  char* path = argv[1]; //("./sample");
-/*
-    lock_list_t* lockList = malloc(sizeof(lock_list_t)):
-  lockList->head = NULL; */
-
-  
+  char* path = argv[1]; 
 
   indexDir(path, files);
   printf("File count : %d\n", files->count);
@@ -207,7 +211,6 @@ int main (int argc, char** argv) {
       char* this_path = malloc(sizeof(char)*strlen(pnt->path)+1);
       strcpy(this_path, pnt->path);
       args->path = this_path;
-      // indexFile(args);
       
       if(pthread_create(&threads[i++], NULL, indexFile, args)) {
         perror("pthread_create");
@@ -222,11 +225,11 @@ int main (int argc, char** argv) {
         perror("pthread_join");
         exit(2);
       }
-      pnt = pnt->next;//pnt shoudld end up where the thread creation left off
+      pnt = pnt->next;//pnt shoudd end up where the thread creation left off
     } 
     remaining_files -= thread_count;
   }
-
+  //destroy locks
   for(int i=0; i<BUCKET_REGIONS; i++) {
     pthread_mutex_destroy(&lock_array[i]);
   }

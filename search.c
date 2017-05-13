@@ -8,15 +8,20 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <regex.h>
-#include <./hash.c>
-//#include <./invert.c>
+#include "./hash.c"
 
+/* the function, search, takes a string as an input and 
+   prints out an error message if the input string is not found 
+   in the index, and prints out the words found together with 
+   their locations if there are matches for the input string
+*/
 
 void search(char* term) {
+  //get pathname for the bucket which would contain the string,term
   char* bucket_location = findBucket(hash(term));
   FILE *fptr;
   char buffer[256];
-  //Lock
+  //open the bucket file using the location generated using findBucket 
   if((fptr = fopen(bucket_location, "r")) == NULL) {
     printf("Term not found!\n");
     exit(1);
@@ -29,7 +34,6 @@ void search(char* term) {
     }
   }
   fclose(fptr);
-  //Unlock
      
   if(found==0){
     printf("Term not found!\n");
